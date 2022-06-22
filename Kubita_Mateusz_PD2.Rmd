@@ -1,0 +1,325 @@
+---
+title: "Praca domowa nr 2"
+author: "Mateusz Kubita"
+date: '2022-04-09'
+output: html_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("Kubita_Mateusz_PD2.R")
+```
+
+
+
+## Wstep
+
+Raport ten jest składową drugiej pracy domowej z przedmiotu Przetwarzanie Danych Ustrukturyzowanych i przedstawia wyniki pięciu zadań związanymi z ramkami danych. Każde z zadań jest rozwiązane na cztery możliwości: za pomocą (1) zapytań SQL'a, (2) bazowych funkcji języka R, (3) pakietu DPLYR, (4) pakietu data.table. W przypadku SQL'a każde zapytanie wyjaśniam co oznacza "w praktyce". Co więcej, każde rozwiązanie jest zamknięte w funkcję, które następnie porównuję przy użyciu pakietu microbenchmark. Zacznę od wczytania danych potrzebnych do zadań.
+
+
+
+```{r Wczytanie danych,cache = TRUE}
+
+#ladowanie 7 zbiorow danych
+Badges <- read.csv("Badges.csv.gz")
+Comments <- read.csv("Comments.csv.gz")
+Tags <- read.csv("Tags.csv.gz")
+Posts <- read.csv("Posts.csv.gz")
+Users <- read.csv("Users.csv.gz")
+Votes <- read.csv("Votes.csv.gz")
+PostLinks <- read.csv("PostLinks.csv.gz")
+
+
+
+```
+
+
+## Zadanie 1
+
+## Zapytanie SQL
+
+Pierwsze rozważane zapytanie SQL jest przedstawione poniżej. Jest ono nieskomplikowane i dość łatwe w zrozumieniu.
+
+```{r, echo = FALSE}
+cat(
+"SELECT Count, TagName
+    FROM Tags
+    WHERE Count > 1000
+    ORDER BY Count DESC")
+```
+
+Interpretacja: Wybieramy kolumny Count i TagName, w których Count było powyżej 1000 i wynik sortujemy według Count malejąco.
+
+
+## Porównanie czasu wykonywania 
+
+Jak już wspominałem we wstępie rozważymy także czas wykonania każdej z funkcji (każdego sposobu rozwiązywania ) z użyciem pakietu microbenchmark.
+
+```{r microb1,cache = TRUE}
+
+microbenchmark::microbenchmark(
+  sqldf = df_sql_1(Tags),
+  base = df_base_1(Tags),
+  dplyr = df_dplyr_1(Tags),
+  data.table = df_table_1(Tags),
+  times = 30L
+)
+```
+Nie trudno jest zauważyć, że najszybciej zrealizowana została funkcja z użyciem bazowego R, a najwięcej czasu zajęła funkcja z pakietu sqldf. Uważam, że zapytanie te jest na tyle mało skomplikowane, że porównywanie prędkości może nie być do końca rzetelne i nie oddawać rzeczywistej prędkości różnych pakietów.
+
+## Porównanie wyników 
+
+W przypadku pierwszego zadania zweryfikuję czy każda metoda zwraca ten sam wynik.
+```{r,cache=TRUE}
+all_equal(df_sql_1(Tags), df_base_1(Tags))
+all_equal(df_base_1(Tags), df_dplyr_1(Tags))
+all_equal(df_dplyr_1(Tags), df_table_1(Tags))
+
+
+```
+Jak widać wyżej, każda z funkcji zwraca ten sam wynik, gdyż zostały zwrócone same wartości TRUE. 
+
+
+
+## Zadanie 2
+
+## Zapytanie SQL
+
+W kolejnym zadaniu rozważałem poniższe zapytanie SQL.
+
+```{r, echo = FALSE}
+cat(
+"   SELECT Location, COUNT(*) AS Count
+    FROM (
+        SELECT Posts.OwnerUserId, Users.Id, Users.Location
+        FROM Users
+        JOIN Posts ON Users.Id = Posts.OwnerUserId
+    )
+    WHERE Location NOT IN ('')
+    GROUP BY Location
+    ORDER BY Count DESC
+    LIMIT 10")
+```
+
+Interpretacja: Wybieramy 10 lokalizacji, w których były najczęściej zakładane konta użytkowników i wypisujemy liczbę założonych kont z tych lokalizacji. Warto wspomnieć, że lokalizacja nie może być pustym napisem.
+
+## Porównanie czasu wykonywania 
+
+```{r microbenc2,cache=TRUE}
+
+microbenchmark::microbenchmark(
+  sqldf = df_sql_2(Posts,Users),
+  base = df_base_2(Posts,Users),
+  dplyr = df_dplyr_2(Posts,Users),
+  data.table = df_table_2(Posts,Users),
+  times = 30L
+)
+```
+
+W przypadku zadania drugiego sytuacja tutaj ma się nieco inaczej jeżeli chodzi o czas wykonywania danych funkcji w porównaniu do zadanie pierwszego. Najszybciej została zrealizowana funkcja z użyciem pakietu dplyr, a najwolniej znowu funkcja korzystająca z pakietu sqldf. Bazowy R okazał się tym razem nieco wolniejszy niż data.table. 
+
+## Porównanie wyników 
+
+Także w tym zadaniu zweryfikuję poprawność wszystkich funkcji.
+```{r,cache=TRUE}
+all_equal(df_sql_2(Posts,Users), df_base_2(Posts,Users))
+all_equal(df_base_2(Posts,Users), df_dplyr_2(Posts,Users))
+all_equal(df_dplyr_2(Posts,Users), df_table_2(Posts,Users))
+
+
+```
+
+
+
+## Zadanie 3
+
+## Zapytanie SQL
+
+Rozważmy poniższe zapytanie SQL.
+
+```{r, echo = FALSE}
+cat(
+" SELECT Year, SUM(Number) AS TotalNumber
+    FROM (
+        SELECT
+            Name,
+            COUNT(*) AS Number,
+            STRFTIME('%Y', Badges.Date) AS Year
+        FROM Badges
+        WHERE Class = 1
+        GROUP BY Name, Year
+        )
+    GROUP BY Year
+    ORDER BY TotalNumber")
+```
+
+Interpretacja: Dla każdego roku liczymy liczność odznak (Badges), które zostały przyznane dla klasy 1 (Badges) i wynik sortujemy według tej liczności rosnąco.
+
+## Porównanie czasu wykonywania 
+
+```{r microbenc3,cache=TRUE}
+
+microbenchmark::microbenchmark(
+  sqldf = df_sql_3(Badges),
+  base = df_base_3(Badges),
+  dplyr = df_dplyr_3(Badges),
+  data.table = df_table_3(Badges),
+  times = 30L
+)
+```
+
+W tym zadaniu ponownie funkcja z pakietu sqldf była najwolniejsza, a wszystkie pozostałe funkcje działały z relatywnie taką samą prędkością. Co ciekawe, bazowy R był najszybszy tym razem.
+
+## Porównanie wyników 
+
+Sprawdźmy poprawność wszystkich funkcji
+```{r,cache=TRUE}
+all_equal(df_sql_3(Badges), df_base_3(Badges))
+all_equal(df_base_3(Badges), df_dplyr_3(Badges))
+all_equal(df_dplyr_3(Badges), df_table_3(Badges))
+
+
+```
+## Zadanie 4
+
+## Zapytanie SQL
+
+Rozważmy poniższe zapytanie SQL.
+
+```{r, echo = FALSE}
+cat(
+"  SELECT
+        Users.AccountId,
+        Users.DisplayName,
+        Users.Location,
+        AVG(PostAuth.AnswersCount) as AverageAnswersCount
+    FROM
+    (
+        SELECT
+            AnsCount.AnswersCount,
+            Posts.Id,
+            Posts.OwnerUserId
+        FROM (
+                SELECT Posts.ParentId, COUNT(*) AS AnswersCount
+                FROM Posts
+                WHERE Posts.PostTypeId = 2
+                GROUP BY Posts.ParentId
+                ) AS AnsCount
+        JOIN Posts ON Posts.Id = AnsCount.ParentId
+    ) AS PostAuth
+    JOIN Users ON Users.AccountId=PostAuth.OwnerUserId
+    GROUP BY OwnerUserId
+    ORDER BY AverageAnswersCount DESC, AccountId ASC
+    LIMIT 10")
+```
+
+Interpretacja: Wybieramy informacje o 10 użytkownikach, których posty (których post typy id był 2) otrzymywały średnio najwięcej komentarzy i te informacje to: id konta użytkownika, DisplayName, Location (założenia konta) i ta średnia arytmetyczna otrzymywanych komentarzy na post. 
+
+## Porównanie czasu wykonywania 
+
+```{r microbenc4,cache=TRUE}
+
+microbenchmark::microbenchmark(
+  sqldf = df_sql_4(Users, Posts),
+  base = df_base_4(Users, Posts),
+  dplyr = df_dplyr_4(Users, Posts),
+  data.table = df_table_4(Users, Posts),
+  times = 30L
+)
+```
+
+W zadaniu 4 znowu najwolniej działała funkcja z użyciem pakietu sqldf, a najszybciej data.table i dplyr.
+
+## Porównanie wyników 
+
+Sprawdźmy poprawność wszystkich funkcji
+```{r check4,cache=TRUE}
+all_equal(df_sql_4(Users, Posts), df_base_4(Users, Posts))
+all_equal(df_base_4(Users, Posts), df_dplyr_4(Users, Posts))
+all_equal(df_dplyr_4(Users, Posts), df_table_4(Users, Posts))
+
+
+```
+## Zadanie 5
+
+## Zapytanie SQL
+
+Rozważmy poniższe zapytanie SQL.
+
+```{r, echo = FALSE,cache = TRUE}
+cat(
+"      SELECT Posts.Title, Posts.Id,
+        STRFTIME('%Y-%m-%d', Posts.CreationDate) AS Date,
+        VotesByAge.Votes
+    FROM Posts
+    JOIN (
+        SELECT
+            PostId,
+            MAX(CASE WHEN VoteDate = 'new' THEN Total ELSE 0 END) NewVotes,
+            MAX(CASE WHEN VoteDate = 'old' THEN Total ELSE 0 END) OldVotes,
+            SUM(Total) AS Votes
+        FROM (
+            SELECT
+                PostId,
+                CASE STRFTIME('%Y', CreationDate)
+                    WHEN '2021' THEN 'new'
+                    WHEN '2020' THEN 'new'
+                    ELSE 'old'
+                    END VoteDate,
+                COUNT(*) AS Total
+            FROM Votes
+            WHERE VoteTypeId IN (1, 2, 5)
+            GROUP BY PostId, VoteDate
+        ) AS VotesDates
+        GROUP BY VotesDates.PostId
+        HAVING NewVotes > OldVotes
+    ) AS VotesByAge ON Posts.Id = VotesByAge.PostId
+    WHERE Title NOT IN ('')
+    ORDER BY Votes DESC
+    LIMIT 10")
+```
+
+Interpretacja: Wybieramy informacje o 10 postach, których otrzymały najwięcej Votes i które w ostatnich latach (lata 2020 lub 2021) zdobyły ich więcej niż w poprzednich. Te informacje to: Id, Title, Date oraz liczność tych głosów. Należy wspomnieć, że ich Title nie może być pustym napisem, a te rodzaje głosów, które bierzemy pod uwagę muszą być typu (VoteTypeId) 1,2 lub 5.
+
+## Porównanie czasu wykonywania 
+
+```{r microbenc5,cache=TRUE}
+
+microbenchmark::microbenchmark(
+  sqldf = df_sql_5(Votes, Posts),
+  base = df_base_5(Votes, Posts),
+  dplyr = df_dplyr_5(Votes, Posts),
+  data.table = df_table_5(Votes, Posts),
+  times = 30L
+)
+```
+
+W zadaniu 5 wyniki czasowe są podobne do zadania 4, gdzie funkcje z pakietu dplyr i data.table działają najszybciej.
+
+## Porównanie wyników 
+
+Sprawdźmy poprawność wszystkich funkcji
+```{r check5,cache=TRUE}
+all_equal(df_sql_5(Votes, Posts), df_base_5(Votes, Posts), convert = TRUE)
+all_equal(df_base_5(Votes, Posts), df_dplyr_5(Votes, Posts), convert = TRUE)
+all_equal(df_dplyr_5(Votes, Posts), df_table_5(Votes, Posts), convert = TRUE)
+
+
+```
+
+Warto zauważyć, że korzystam tutaj z dodatkowego parametru 'convert = TRUE', gdyż typ danych w danej kolumnie może się różnić w niektórych przypadkach (np. char, a int)
+
+## Podsumowanie
+
+Przechodząc do podsumowania raportu, myślę że najbardziej wymagającym zadaniem było dla mnie zadanie numer 5, które wymagało znajomości instrukcji CASE w zapytaniach SQL'owych. W przypadku pozostałych zadań trudności także sprawiło mi zadanie numer 3, w którym korzystałem pierwotnie z funkcji strftime, aby wydobyć rok z daty, lecz póżniej zmieniłem na funkcję stri_sub, która znacznie przyspieszyła działanie kodu. Jedną z rzeczy, do której musiałem się przyzwyczaić było także używanie instrukcji "%>%" w funkcjach z użyciem pakietu dplyr, co na początku było bardzo uciążliwe, jednakże z czasem zrozumiałem, że kod z użyciem właśnie tej instrukcji jest znacznie czytelniejszy. 
+
+Jeżeli chodzi o sposoby implementacji tych zadań, to spośród czterech sposobów (SQL, bazowy R, pakiet dplyr, pakiet data.table) najprzyjemniej pracowało mi się z pakietem dplyr, którego nazwy funkcji są zrozumiałe i nie sprawiły mi większego problemu w zrozumieniu. Niemniej jednak, uważam że poziom trudności każdego z czterech sposobów jest relatywnie podobny. W przypadku problemów pomocnym oczywiście był internet, a w głównej mierze strona Stack overflow. Myślę, że projekt ten wzbudził ciekawość we mnie w związku z językiem SQL, z którym miałem pierwszy raz do czynienia.
+
+
+## Czas wykonywanie
+
+Warto w tym miejscu wspomnieć o prędkości różnych metod. Aby porównywać wyniki korzystałem z biblioteki microbenchmark. 
+
+Na początku warto zauważyć, że w niemal każdym zadaniu funkcja z wykorzystaniem pakietu sqldf najwolniej działała, co nie jest dla mnie większym zaskoczeniem. Jeżeli chodzi o pozostałe funkcje to wyniki mnie dość zaskoczyły, a w szczególności fakt tego, że funkcje z wykorzystaniem bazowego R nie były najszybsze. 
+Przechodząc do najszybszych funkcji to jest to raz data.table a raz dplyr. Zauważmy, że w zadaniu 4 jest to data.table, a w 5 dplyr. Zwracam szczególną uwagę na prędkość tych funkcji w zadaniach 3-5, gdyź są one nieco bardziej rozbudowane niż 1-2 i z tego powodu porównywanie wyników czasowych ma większy sens.

@@ -1,0 +1,9 @@
+proto
+gsubfn
+RSQLite
+sqldf
+dplyr
+data.table
+microbenchmark
+compare
+stringi
